@@ -1,0 +1,25 @@
+# binaries
+/bin/
+/torrent
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# test binaries and artifacts
+*.test
+*.out
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# loaded test files / downloaded content
+downloads/
+*.download
+
+# internal documents
+docs/
