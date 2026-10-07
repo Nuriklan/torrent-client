@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/Nuriklan/torrent-client/internal/bencode"
+	"github.com/Nuriklan/torrent-client/internal/torrentfile"
 )
 
 func main() {
@@ -13,15 +13,11 @@ func main() {
 		log.Fatal("Usage: torrent <path-to-torrent-file>")
 	}
 
-	data, err := os.ReadFile(os.Args[1])
+	file := os.Args[1]
+	torrentFile, err := torrentfile.Open(file)
 	if err != nil {
-		log.Fatalf("failed to read file %v", err)
+		log.Fatalf("failed to open torrent file %v: %v", file, err)
 	}
 
-	res, err := bencode.Unmarshal(data)
-	if err != nil {
-		log.Fatalf("decode error: %v", err)
-	}
-
-	fmt.Printf("Decoded: %+v\n", res)
+	fmt.Printf("Decoded: %+v\n", torrentFile)
 }
