@@ -1,6 +1,7 @@
 package tracker
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/url"
@@ -84,4 +85,21 @@ func buildURL(baseURL string, req AnnounceRequest) (*url.URL, error) {
 	}
 
 	return u, nil
+}
+
+func unmarshalPeers(peersBin []byte) ([]Peer, error) {
+	if len(peersBin)%6 != 0 {
+		return nil, fmt.Errorf("malformed peers: length %d is not a multiple of 6", len(peersBin))
+	}
+
+	numPeers := len(peersBin) / 6
+	peers := make([]Peer, 0, numPeers)
+
+	for i := 0; i < len(peersBin); i += 6 {
+		ip := net.IP(peersBin[i : i+4])
+		port := binary.BigEndian.Uint16(peersBin[i+4 : i+6])
+		peers = append(peers, Peer{IP: ip, Port: port})
+	}
+
+	return peers, nil
 }

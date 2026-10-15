@@ -1,9 +1,11 @@
 package tracker
 
 import (
+	"net"
 	"net/url"
+	"reflect"
 	"strings"
-	"testing"	
+	"testing"
 )
 
 func TestBuildURL(t *testing.T) {
@@ -111,4 +113,59 @@ func TestBuildURL(t *testing.T) {
 			}
 		})
 	} 
+}
+
+func TestUnmarshalPeers(t *testing.T) {
+	tests := []struct{
+		name string
+		input []byte
+		want []Peer
+		wantErr bool
+	}{
+		{
+			name: "valid two peers",
+			input: []byte{127, 0, 0, 1, 0x1A, 0xE1, 192, 168, 1, 1, 0x1F, 0x90},
+			want: []Peer{
+				{IP: net.IP{127, 0, 0, 1}, Port: 6881},
+				{IP: net.IP{192, 168, 1, 1}, Port: 8080},
+			},
+			wantErr: false,
+		},
+		{
+			name: "empty input",
+			input: []byte{},
+			want: []Peer{},
+			wantErr: false,
+		},
+		{
+			name: "invalid length: not a multiple of 6",
+			input: []byte{127, 0, 0, 1, 0x1A},
+			want: nil,
+			wantErr: true,
+		},
+		{
+			name: "invalid length: 7 bytes",
+			input: []byte{127, 0, 0, 1, 0x1A, 0xE1, 255},
+			want: nil,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run((tt.name), func(t *testing.T) {
+			got, err := unmarshalPeers(tt.input)
+
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("unmarshalPeers() error = %v, wantErr = %v", err, tt.wantErr)
+			}
+
+			if tt.wantErr {
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("unmarshalPeers() got = %+v, want %+v", got, tt.want)
+			}
+		})
+	}
 }
