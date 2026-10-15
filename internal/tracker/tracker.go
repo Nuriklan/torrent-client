@@ -3,9 +3,14 @@ package tracker
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"strconv"
+	"time"
+
+	"github.com/Nuriklan/torrent-client/internal/bencode"
 )
 
 type Peer struct {
@@ -31,6 +36,66 @@ type AnnounceRequest struct {
 type AnnounceResponse struct {
 	Interval int
 	Peers    []Peer
+}
+
+func Announce(baseURL string, req AnnounceRequest) (*AnnounceResponse, error) {
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	u, err := buildURL(baseURL, req)
+	if err != nil {
+		return nil, fmt.Errorf("could not build URL: %v", err)
+	}
+
+	resp, err := client.Get(u.String())
+	if err != nil {
+		return nil, fmt.Errorf("tracker request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("tracker returned bad status: %s", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	bencodedData, err := bencode.Unmarshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal body: %w", err)
+	}
+
+	dict, ok := bencodedData.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("expected dictionary in tracker response, got %T", bencodedData)
+	}
+
+	if reason, ok := dict["failure reason"].(string); ok {
+		return nil, fmt.Errorf("tracker rejected request: %s", reason)
+	}
+
+	interval, ok := dict["interval"].(int)
+	if !ok {
+		return nil, fmt.Errorf("tracker response missing 'interval' field")
+	}
+
+	peerStr, ok := dict["peers"].(string)
+	if !ok {
+		return nil, fmt.Errorf("tracker response missing 'peers' field")
+	}
+
+	peers, err := unmarshalPeers([]byte(peerStr))
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal peers: %w", err)
+	}
+
+	return &AnnounceResponse{
+		Interval: interval,
+		Peers:    peers,
+	}, nil
 }
 
 func escapeBinaryPercent(b []byte) string {

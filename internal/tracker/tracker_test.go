@@ -2,6 +2,8 @@ package tracker
 
 import (
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"strings"
@@ -112,18 +114,18 @@ func TestBuildURL(t *testing.T) {
 				tt.checkFunc(t, got)
 			}
 		})
-	} 
+	}
 }
 
 func TestUnmarshalPeers(t *testing.T) {
-	tests := []struct{
-		name string
-		input []byte
-		want []Peer
+	tests := []struct {
+		name    string
+		input   []byte
+		want    []Peer
 		wantErr bool
 	}{
 		{
-			name: "valid two peers",
+			name:  "valid two peers",
 			input: []byte{127, 0, 0, 1, 0x1A, 0xE1, 192, 168, 1, 1, 0x1F, 0x90},
 			want: []Peer{
 				{IP: net.IP{127, 0, 0, 1}, Port: 6881},
@@ -132,21 +134,21 @@ func TestUnmarshalPeers(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "empty input",
-			input: []byte{},
-			want: []Peer{},
+			name:    "empty input",
+			input:   []byte{},
+			want:    []Peer{},
 			wantErr: false,
 		},
 		{
-			name: "invalid length: not a multiple of 6",
-			input: []byte{127, 0, 0, 1, 0x1A},
-			want: nil,
+			name:    "invalid length: not a multiple of 6",
+			input:   []byte{127, 0, 0, 1, 0x1A},
+			want:    nil,
 			wantErr: true,
 		},
 		{
-			name: "invalid length: 7 bytes",
-			input: []byte{127, 0, 0, 1, 0x1A, 0xE1, 255},
-			want: nil,
+			name:    "invalid length: 7 bytes",
+			input:   []byte{127, 0, 0, 1, 0x1A, 0xE1, 255},
+			want:    nil,
 			wantErr: true,
 		},
 	}
@@ -168,4 +170,74 @@ func TestUnmarshalPeers(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAnnounce(t *testing.T) {
+	req := AnnounceRequest{
+		InfoHash: [20]byte{1, 2, 3},
+		PeerID:   [20]byte{'N', 'T'},
+		Port:     6881,
+		Left:     1000,
+		Compact:  true,
+	}
+
+	t.Run("successful announce", func(t *testing.T) {
+		mockPeers := []byte{127, 0, 0, 1, 0x1A, 0xE1}
+		body := append([]byte("d8:intervali900e5:peers6:"), mockPeers...)
+		body = append(body, 'e')
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(body)
+		}))
+		defer server.Close()
+
+		resp, err := Announce(server.URL, req)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if resp.Interval != 900 {
+			t.Errorf("expected interval 900, got %d", resp.Interval)
+		}
+
+		if len(resp.Peers) != 1 {
+			t.Errorf("expected 1 peer, got %d", len(resp.Peers))
+		}
+
+		if resp.Peers[0].String() != "127.0.0.1:6881" {
+			t.Errorf("expected peer 127.0.0.1:6881, got %s", resp.Peers[0].String())
+		}
+	})
+
+	t.Run("tracker returns failure reason", func(t *testing.T) {
+		body := []byte("d14:failure reason17:torrent not founde")
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write(body)
+		}))
+		defer server.Close()
+
+		_, err := Announce(server.URL, req)
+		if err == nil {
+			t.Fatalf("expected error from failure reason, got nil")
+		}
+
+		if !strings.Contains(err.Error(), "torrent not found") {
+			t.Errorf("expected error to contain 'torrent not found', got %v", err)
+		}
+	})
+
+	t.Run("tracker returns server error status", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		_, err := Announce(server.URL, req)
+		if err == nil {
+			t.Fatalf("expected error for status 500, got nil")
+		}
+	})
 }
