@@ -65,10 +65,10 @@ func main() {
 		fmt.Printf("CONNECTED! \n")
 		fmt.Printf("  Remote Peer ID: %q\n", string(client.PeerID[:]))
 		fmt.Printf("  Has Bitfield: %v (len: %d bytes)\n", client.Bitfield != nil, len(client.Bitfield))
-		
+
 		err = client.SendInterested()
 		if err != nil {
-			log.Printf("failed to send interested: %v", err)	
+			log.Printf("failed to send interested: %v", err)
 		}
 
 		fmt.Println("Reading next messages from peer:")

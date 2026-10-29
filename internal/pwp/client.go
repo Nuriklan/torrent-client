@@ -71,3 +71,11 @@ func (c *Client) SendInterested() error {
 	return err
 }
 
+// SendRequest formats and sends a Request message (ID 6) to the peer,
+// asking for a block of length bytes at offset begin within piece index.
+func (c *Client) SendRequest(index, begin, length int) error {
+	msg := FormatRequest(index, begin, length)
+
+	_, err := c.Conn.Write(msg.Serialize())
+	return err
+}
