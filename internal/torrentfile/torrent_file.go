@@ -97,3 +97,10 @@ func splitPieceHashes(pieces []byte) ([][20]byte, error) {
 
 	return hashes, nil
 }
+
+func (tf *TorrentFile) PieceSize(index int) int {
+	begin := index * tf.PieceLength
+	end := min(begin+tf.PieceLength, tf.Length)
+
+	return end - begin
+}

@@ -69,30 +69,21 @@ func main() {
 		err = client.SendInterested()
 		if err != nil {
 			log.Printf("failed to send interested: %v", err)
+			continue
 		}
 
-		fmt.Println("Reading next messages from peer:")
-		for i := 0; i < 5; i++ {
-			msg, err := client.Read()
-			if err != nil {
-				fmt.Printf("Read error: %v\n", err)
-				break
-			}
-			if msg == nil {
-				fmt.Println("  -> Keep-Alive")
-				continue
-			}
-			fmt.Printf("  -> Messsage ID: %d (Payload bytes: %d)\n", msg.ID, len(msg.Payload))
-			if msg.ID == pwp.MsgBitfield {
-				bf := pwp.Bitfield(msg.Payload)
-				fmt.Printf("    Found Bitfield! Length: %d bytes\n", len(bf))
-				fmt.Printf("    Peer has piece 0: %v\n", bf.HasPiece(0))
-			}
-			if msg.ID == pwp.MsgUnchoke {
-				fmt.Println("    Peer UNCHOKED us! We can request blocks now!")
-			}
+		pieceIndex := 0
+		pieceLen := torrentFile.PieceLength
+		expectedHash := torrentFile.PieceHashes[pieceIndex]
+
+		fmt.Printf("\n🚀 Starting download of Piece %d (%d bytes)...\n", pieceIndex, pieceLen)
+		data, err := client.DownloadPiece(pieceIndex, pieceLen, expectedHash)
+		if err != nil {
+			fmt.Printf("❌ Failed to download piece: %v\n", err)
+			continue
 		}
 
+		fmt.Printf("🎉 SUCCESS! Piece %d downloaded and verified! Size: %d bytes\n", pieceIndex, len(data))
 		break
 	}
 }

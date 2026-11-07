@@ -1,11 +1,17 @@
 package pwp
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"net"
 	"time"
 
 	"github.com/Nuriklan/torrent-client/internal/tracker"
+)
+
+const (
+	maxBlockSize = 16384
+	maxBacklog   = 5
 )
 
 type Client struct {
@@ -78,4 +84,61 @@ func (c *Client) SendRequest(index, begin, length int) error {
 
 	_, err := c.Conn.Write(msg.Serialize())
 	return err
+}
+
+// Download piece
+func (c *Client) DownloadPiece(index, pieceLength int, expectedHash [20]byte) ([]byte, error) {
+	buf := make([]byte, pieceLength)
+	requested := 0
+	downloaded := 0
+	backlog := 0
+
+	for downloaded < pieceLength {
+		for !c.Choked && backlog < maxBacklog && requested < pieceLength {
+			// filling requests queue
+			blockSize := maxBlockSize
+			if pieceLength-requested < blockSize {
+				blockSize = pieceLength - requested
+			}
+
+			err := c.SendRequest(index, requested, blockSize)
+			if err != nil {
+				return nil, fmt.Errorf("failed to send request: %w", err)
+			}
+
+			backlog++
+			requested += blockSize
+		}
+
+		// reading response from peer
+		msg, err := c.Read()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read message: %w", err)
+		}
+		if msg == nil {
+			continue
+		}
+
+		// process message type
+		switch msg.ID {
+		case MsgChoke:
+			c.Choked = true
+		case MsgUnchoke:
+			c.Choked = false
+		case MsgPiece:
+			n, err := ParsePiece(index, buf, msg)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse piece: %w", err)
+			}
+			downloaded += n
+			backlog--
+		}
+	}
+
+	hash := sha1.Sum(buf)
+	if hash != expectedHash {
+		return nil, fmt.Errorf("piece %d hash mismatch: expected %x, got %x", index, expectedHash, hash)
+	}
+
+	return buf, nil
 }
